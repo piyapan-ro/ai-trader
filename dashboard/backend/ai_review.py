@@ -13,6 +13,7 @@ Every decision is scored against real M1 prices twice:
   gain_r   = decision - baseline   (in R of the risk at review time)
 so it is measurable whether the reviews help before they are allowed to act.
 """
+import math
 import threading
 import time
 import uuid
@@ -46,6 +47,10 @@ def check(decision, pos, cur, atr):
         new_tp = float(decision.get("new_tp")) if decision.get("new_tp") not in (None, "", 0) else None
     except (TypeError, ValueError):
         return "HOLD", None, None, "ตัวเลข SL/TP อ่านไม่ได้ → HOLD"
+    if any(x is not None and not math.isfinite(x) for x in (new_sl, new_tp)):  # json.loads accepts NaN / Infinity
+        return "HOLD", None, None, "ตัวเลข SL/TP ไม่ใช่ตัวเลขจริง → HOLD"
+    if act in ("TIGHTEN_SL", "MOVE_TP") and not (atr and math.isfinite(atr) and atr > 0):
+        return "HOLD", None, None, "ไม่มีค่า ATR – ตรวจระยะห่าง SL/TP ไม่ได้ → HOLD"
     if act == "TIGHTEN_SL":
         if new_sl is None:
             return "HOLD", None, None, "TIGHTEN_SL ไม่มี new_sl → HOLD"
