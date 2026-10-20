@@ -766,6 +766,8 @@ def ai_review_tick():
     mode = sc.get("ai_review_mode", "shadow")
     if mode == "off" or not ai_has_key() or store.load("risk")["kill_switch"]:
         return
+    if market.closed_reason():  # market closed: positions can't be changed, don't ask the AI
+        return
     trig = float(sc.get("ai_review_trigger_r", 0.5) or 0.5)
     magic = settings()["dashboard_magic"]
     for p in broker.positions():
