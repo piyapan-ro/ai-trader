@@ -132,6 +132,13 @@ def place_order(side: str, volume: float, stop_loss: float, take_profit: float =
 
 
 @mcp.tool()
+def get_ai_reviews(days: int = 30) -> dict:
+    """AI reviews of open positions that went the wrong way (HOLD / CLOSE / TIGHTEN_SL / MOVE_TP), each scored
+    against 'leave it alone' on real prices: gain_r > 0 means the AI's decision was better."""
+    return _get("ai/reviews", days=days, limit=15)
+
+
+@mcp.tool()
 def get_lanes(days: int = 30) -> dict:
     """Trading lanes (each strategy + the AI) with their own quota: mode off/shadow/live, today's use,
     and results on real prices for live trades and shadow (paper) signals. A lane goes Live when its

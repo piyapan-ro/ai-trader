@@ -178,7 +178,13 @@
           <div style="max-width:110px"><label>ทุก (นาที)</label><input type="number" id="aiInt" min="1"></div>
           <div style="max-width:120px"><label>ความมั่นใจ ≥</label><input type="number" id="aiConf" min="0" max="100"></div>
           <div style="max-width:150px"><label>Liquidity Sweep check</label><select id="aiLiq"><option value="block">บล็อกแผนที่สวน sweep</option><option value="warn">เตือนอย่างเดียว</option><option value="off">ปิด</option></select></div>
-          <div style="max-width:120px"><label>ยกเลิก Limit (นาที)</label><input type="number" id="aiExp" min="0"></div>
+          <div style="max-width:120px"><label>Limit มีผล (นาที, ค่าเริ่มต้น)</label><input type="number" id="aiExp" min="0"></div>
+        </div>
+        <div class="row" style="align-items:center;flex-wrap:wrap;gap:8px">
+          <div style="max-width:190px"><label>AI แก้ออเดอร์ที่ผิดทาง</label><select id="aiRev"><option value="shadow">Shadow (วิเคราะห์ + ให้คะแนน)</option><option value="live">Live (ทำจริง)</option><option value="off">ปิด</option></select></div>
+          <div style="max-width:130px"><label>รีวิวเมื่อติดลบ ≥ (R)</label><input type="number" step="0.1" id="aiRevR"></div>
+          <div style="max-width:130px"><label>ทำจริงเมื่อมั่นใจ ≥</label><input type="number" id="aiRevConf"></div>
+          <div style="max-width:190px"><label>ตัวกรองบริบท (เลนกลยุทธ์)</label><select id="laneGate"><option value="block">บล็อก</option><option value="warn">บันทึกอย่างเดียว</option><option value="off">ปิด</option></select></div>
           <div class="actions"><button class="btn sm" id="aiSave">บันทึก</button></div>
         </div>
         <div class="muted" style="font-size:12px" id="aiAutoInfo"></div>
@@ -187,6 +193,12 @@
           <div class="muted" style="font-size:12px" id="aiJrInfo"></div>
           <div id="aiJrConf" class="mt"></div>
           <div id="aiJrRecent" class="mt"></div>
+        </div>
+        <div style="border-top:1px solid var(--line);margin-top:10px;padding-top:10px">
+          <div class="row" style="justify-content:space-between;align-items:center"><b>AI แก้ออเดอร์ที่ผิดทาง (เทียบกับปล่อยไว้)</b><button class="btn sm" id="aiRvRefresh">รีเฟรช</button></div>
+          <div class="muted" style="font-size:12px">ไม่ขยาย SL · ไม่เพิ่มไม้/เฉลี่ยต้นทุน · ทำได้แค่ HOLD / CLOSE / ขยับ SL เข้า / ดึง TP เข้า · gain = ผลของ AI − ผลถ้าปล่อยไว้</div>
+          <div id="aiRvInfo" class="muted mt" style="font-size:12px"></div>
+          <div id="aiRvTable" class="mt"></div>
         </div>
       </div>
     </div>

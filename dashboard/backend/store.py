@@ -68,7 +68,13 @@ DEFAULTS = {
             "SMC": False, "SND": False, "EMA": False, "BB": False, "ASIA": False, "AIPB": False
         },
         "ai_liquidity_mode": "block",   # AI plan against a fresh liquidity sweep: block | warn | off
-        "ai_limit_expiry_min": 15,      # AI LIMIT/STOP orders not filled within N minutes are cancelled
+        "ai_limit_expiry_min": 45,      # default validity of AI LIMIT/STOP orders (the AI may set 15..ai_limit_max_min)
+        "ai_limit_max_min": 120,
+        "ai_review_mode": "shadow",     # AI review of positions going the wrong way: off | shadow | live
+        "ai_review_trigger_r": 0.5,     # review when a position is this many R against us
+        "ai_review_min_conf": 60,       # live: act only at this confidence or higher
+        "ai_review_max": 3,             # reviews per position
+        "lane_gate_mode": "block",      # strategy lanes: market-context gate block | warn | off
     },
     "strategy_params": {},              # per-strategy overrides applied from the Optimizer
     "optimizer": {"history": []},       # applied changes (for rollback)

@@ -41,6 +41,7 @@ def record(plan, meta):
         "action": plan.get("action", "WAIT"), "order_type": plan.get("order_type", "MARKET"),
         "entry": plan.get("entry"), "entry_ref": plan.get("entry_ref"), "sl": plan.get("sl"), "tp": plan.get("tp"),
         "rr": plan.get("rr"), "confidence": float(plan.get("confidence") or 0), "valid": bool(plan.get("valid")),
+        "gate": plan.get("gate", ""), "valid_min": plan.get("valid_min"),
         "problem": plan.get("problem", ""), "liq_alignment": plan.get("liq_alignment"),
         "liq_notes": plan.get("liq_notes", []), "session": meta.get("session"), "regime": meta.get("regime"),
         "spread": float(meta.get("spread") or 0), "reason": str(plan.get("reason") or "")[:200],
@@ -81,6 +82,7 @@ def _score(p, bars, now, expiry_min):
         lim = p["entry"] or entry
         kind = p["order_type"]
         filled = None
+        expiry_min = p.get("valid_min") or expiry_min  # the plan's own validity when the AI gave one
         for i, r in enumerate(b.itertuples()):
             if r.time > p["time"] + expiry_min * 60:
                 break
@@ -91,7 +93,7 @@ def _score(p, bars, now, expiry_min):
                 filled = i
                 break
         if filled is None:
-            if now > p["time"] + expiry_min * 60:
+            if now > p["time"] + (p.get("valid_min") or expiry_min) * 60:
                 p.update(status="expired", exit="ไม่ถึงราคา Limit/Stop")
                 return True
             return False
@@ -160,6 +162,9 @@ def lane_stats(days=30, now=None):
         out[lane] = {"all": _agg(rows), "live": _agg([p for p in rows if p["executed"]]),
                      "shadow": _agg([p for p in rows if p.get("origin") == "shadow"]),
                      "blocked": _agg([p for p in rows if not p["valid"]]),
+                     # context gate verdict on every plan (shadow too): does the gate pick the losers?
+                     "gate_flagged": _agg([p for p in rows if p.get("gate")]),
+                     "gate_clear": _agg([p for p in rows if "gate" in p and not p.get("gate")]),
                      "open": sum(1 for p in rows if p["status"] in ("open", "pending")), "plans": len(rows)}
     return out
 

@@ -461,7 +461,10 @@ $("#aiExec").addEventListener("click", (e) => confirmClick(e.currentTarget, "ย
 async function loadAIState() {
   const s = await api("ai/state");
   $("#aiAuto").checked = s.ai_auto; $("#aiInt").value = s.interval_min; $("#aiConf").value = s.min_conf;
-  $("#aiLiq").value = s.liquidity_mode || "block"; $("#aiExp").value = s.limit_expiry_min ?? 15;
+  $("#aiLiq").value = s.liquidity_mode || "block"; $("#aiExp").value = s.limit_expiry_min ?? 45;
+  $("#aiRev").value = s.review_mode || "shadow"; $("#aiRevR").value = s.review_trigger_r ?? 0.5; $("#aiRevConf").value = s.review_min_conf ?? 60;
+  $("#laneGate").value = s.gate_mode || "block";
+  loadAIReviews().catch(() => {});
   loadAIJournal().catch(() => {});
   try { const rg = await api("regime"); $("#aiAutoInfo").dataset.reg = rg.label; } catch (e) {}
   $("#aiAutoInfo").innerHTML = (s.has_key ? `ใช้ ${s.provider === "openai" ? "ChatGPT" : "Claude"} วิเคราะห์` : "ยังไม่มี API Key → ใช้แผนจากกฎ (ใส่ Key ได้ที่ Risk & Settings)") +
@@ -470,7 +473,9 @@ async function loadAIState() {
   if (s.last && !S.aiPlan) showPlan(s.last);
 }
 $("#aiSave").addEventListener("click", async () => {
-  await api("settings", { method: "POST", body: { scanner: { ai_auto: $("#aiAuto").checked, ai_interval_min: Math.max(1, +$("#aiInt").value || 15), ai_min_conf: +$("#aiConf").value || 65, ai_liquidity_mode: $("#aiLiq").value, ai_limit_expiry_min: Math.max(0, +$("#aiExp").value || 0) } } });
+  await api("settings", { method: "POST", body: { scanner: { ai_auto: $("#aiAuto").checked, ai_interval_min: Math.max(1, +$("#aiInt").value || 15), ai_min_conf: +$("#aiConf").value || 65, ai_liquidity_mode: $("#aiLiq").value, ai_limit_expiry_min: Math.max(0, +$("#aiExp").value || 0),
+    ai_review_mode: $("#aiRev").value, ai_review_trigger_r: Math.max(0.1, +$("#aiRevR").value || 0.5), ai_review_min_conf: +$("#aiRevConf").value || 60,
+    lane_gate_mode: $("#laneGate").value } } });
   toast("บันทึก AI Auto-Trade แล้ว"); loadAIState(); refreshAutoBadge();
 });
 async function loadAIJournal() {
@@ -493,6 +498,22 @@ async function loadAIJournal() {
     { h: "สถานะ", f: (p) => esc(st[p.status] || p.status) + (p.exit ? " · " + esc(p.exit) : "") }, { h: "ผล", n: 1, f: (p) => fmtR(p.result_r) }],
     d.recent, "ยังไม่มีแผน");
 }
+async function loadAIReviews() {
+  const d = await api("ai/reviews?days=30&limit=15"), s = d.stats;
+  const fmtR = (v) => (v === null || v === undefined ? "—" : `<span class="${cls(v)}">${signed(v, 2)}R</span>`);
+  $("#aiRvInfo").innerHTML = `30 วัน: รีวิว ${s.reviews} ครั้ง · ปิดผลแล้ว ${s.all.n} · AI ช่วย ${s.all.helped} / แย่ลง ${s.all.hurt} · gain เฉลี่ย ${fmtR(s.all.avg_gain_r)} · <b>${esc(s.verdict)}</b>`;
+  const rows = Object.entries(s.by_action).map(([k, v]) => ({ k, ...v })).filter((r) => r.n);
+  const recent = d.recent.map((r) => `<tr><td>${ftime(r.time)}</td><td>${esc(r.lane)} ${sideTag(r.side)}</td><td class="n">${signed(r.r_at, 2)}R</td>
+    <td><b>${esc(r.ai_action || r.action)}</b>${r.new_sl ? " SL→" + esc(r.new_sl) : ""}${r.new_tp ? " TP→" + esc(r.new_tp) : ""} <span class="muted">${numTxt(r.confidence)}%</span>${r.problem ? ` <span class="neg" title="${esc(r.problem)}">ปฏิเสธ</span>` : ""}</td>
+    <td>${r.executed ? "✓ ทำแล้ว" : esc(r.mode)}</td><td class="n">${fmtR(r.decision_r)} / ${fmtR(r.baseline_r)}</td><td class="n">${fmtR(r.gain_r)}</td>
+    <td style="white-space:normal;font-size:12px" class="muted">${esc(r.reason)}</td></tr>`).join("");
+  $("#aiRvTable").innerHTML = (rows.length ? table([{ h: "การตัดสินใจ", f: (r) => esc(r.k) }, { h: "ปิดผล", n: 1, f: (r) => r.n },
+    { h: "ผล AI", n: 1, f: (r) => fmtR(r.avg_decision_r) }, { h: "ถ้าปล่อยไว้", n: 1, f: (r) => fmtR(r.avg_baseline_r) },
+    { h: "gain เฉลี่ย", n: 1, f: (r) => fmtR(r.avg_gain_r) }], rows) : "") +
+    (recent ? `<table class="mt"><thead><tr><th>เวลา</th><th>ไม้</th><th class="n">ตอนรีวิว</th><th>AI ตัดสินใจ</th><th>โหมด</th><th class="n">ผล AI / ปล่อยไว้</th><th class="n">gain</th><th>เหตุผล</th></tr></thead><tbody>${recent}</tbody></table>`
+      : `<div class="empty">ยังไม่มีไม้ที่ผิดทางถึงเกณฑ์</div>`);
+}
+$("#aiRvRefresh").addEventListener("click", () => loadAIReviews().catch((e) => toast(e.message)));
 $("#aiJrRefresh").addEventListener("click", () => loadAIJournal().catch((e) => toast(e.message)));
 async function loadLanes() {
   const d = await api("lanes?days=30");
@@ -508,6 +529,7 @@ async function loadLanes() {
     { h: "Shadow (แผน·ชนะ·เฉลี่ย)", f: (x) => res(x.results && x.results.shadow) },
     { h: "Live (ไม้·ชนะ·เฉลี่ย)", f: (x) => res(x.results && x.results.live) },
     { h: "ถูกบล็อก (ถ้าเข้าจะได้)", f: (x) => res(x.results && x.results.blocked) },
+    { h: "ตัวกรองบริบท: ติดธง / ผ่าน", f: (x) => `${res(x.results && x.results.gate_flagged)} <span class="muted">/</span> ${res(x.results && x.results.gate_clear)}` },
   ], d.lanes);
 }
 $("#lnRefresh").addEventListener("click", () => loadLanes().catch((e) => toast(e.message)));
