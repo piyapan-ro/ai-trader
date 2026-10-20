@@ -27,6 +27,7 @@ import optimizer
 import news
 import regime
 import market_context as mctx
+import market_hours
 import trade_manager as tmgr
 import store
 import strategies as st
@@ -93,6 +94,7 @@ def guard_live_autotrade():
 enable_autotrade_on_demo()
 guard_live_autotrade()
 tm = tmgr.TradeManager(broker, settings, risk.log)
+market = market_hours.MarketWatch(broker, lambda: sym())
 app = FastAPI(title="AI Trader Dashboard")
 
 # ------------------------------------------------------------------ API protection
@@ -662,6 +664,7 @@ def ai_loop():
     last_eval = 0
     while True:
         try:
+            market.closed_reason()  # keep the tick watch warm so a frozen feed is noticed in time
             ai_autotrade_tick()
         except Exception as e:
             print("[AI]", repr(e))
@@ -1223,6 +1226,10 @@ def rule_plan(ctx):
 
 
 def run_ai(question=None, tf=None, origin="manual"):
+    closed = market.closed_reason()
+    if closed:  # nothing trades: don't send the market data to the AI (and don't pay for the call)
+        return {"source": "closed", "text": f"ตลาดปิด – ไม่ได้ส่งข้อมูลไปถาม AI\n{closed}", "note": closed,
+                "plan": validate_plan({"action": "WAIT", "reason": closed, "source": "rules"})}
     ctx = market_context(tf)
     s = settings()["ai"]
     if not s.get("model"):
@@ -1473,8 +1480,10 @@ def ai_autotrade_tick():
     AI_STATE["last_run"] = int(time.time())
     res = run_ai(origin="auto")
     plan = res["plan"]
-    AI_STATE["last"] = plan
     sig = {"strategy": "AI", "side": plan.get("action", "WAIT"), "entry": plan.get("entry_ref")}
+    if res["source"] == "closed":
+        return _alog(sig, "skip", "ตลาดปิด – ไม่ถาม AI: " + res["note"])
+    AI_STATE["last"] = plan
     if plan.get("action") == "WAIT":
         return _alog(sig, "skip", "AI: WAIT – " + plan.get("reason", ""))
     if plan.get("confidence", 0) < sc.get("ai_min_conf", 65):

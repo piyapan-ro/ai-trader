@@ -447,7 +447,8 @@ $("#aiBtn").addEventListener("click", async () => {
   try {
     const r = await api("ai/analyze", { method: "POST", body: { question: $("#aiQ").value } });
     $("#aiOut").innerHTML = mdLite(r.text.replace(/```json[\s\S]*?```/g, "").trim());
-    $("#aiNote").textContent = (r.source === "claude" || r.source === "openai" ? `วิเคราะห์โดย ${r.model}` : "วิเคราะห์จากกฎ (rule-based)") + (r.note ? " · " + r.note : "");
+    $("#aiNote").textContent = r.source === "closed" ? "ตลาดปิด – ไม่ได้ส่งข้อมูลไปถาม AI" :
+      (r.source === "claude" || r.source === "openai" ? `วิเคราะห์โดย ${r.model}` : "วิเคราะห์จากกฎ (rule-based)") + (r.note ? " · " + r.note : "");
     showPlan(r.plan);
   } catch (e) { $("#aiOut").textContent = "ผิดพลาด: " + e.message; }
 });
