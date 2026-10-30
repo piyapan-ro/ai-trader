@@ -506,6 +506,9 @@ def _gate_context(S, tf):
     return ctx
 
 
+BLOCK_HOURS_UTC = [23, 0, 1]  # shadow 15-29 Oct: 70 plans in these hours averaged -0.54R vs -0.14R overall
+
+
 def gate_trend_flag(ctx, side, tfs):
     """Reason when `side` goes against the trend on every TF in tfs (empty tfs = check off), else ''."""
     tfs = [t for t in (tfs or []) if (ctx.get(t) or {}).get("trend")]
@@ -530,13 +533,13 @@ def context_gate(S, code, lane, side, entry, sl, tf):
     3) a resistance / support zone or untaken liquidity pool closer than 0.5R in the trade direction,
     4) AIPB on the same side as one of its own input lanes that is already in a position (= the same trade twice),
     5) counter-trend: the side opposes the EMA50/EMA200 trend on every TF in gate_trend_tfs (default H1+H4),
-    6) a blocked UTC hour (default 00h: the daily rollover, wide spreads and exits within minutes).
+    6) a blocked UTC hour (default 23:00-01:59: rollover and the Asian open, wide spreads and exits within minutes).
     Returns a list of reasons (empty = ok)."""
     out = []
     buy = side == "BUY"
     risk_d = abs(entry - sl) or 1e-9
     sc = store.load("scanner")
-    hour_flag = gate_hour_flag(int(((risk.server_now() - (risk.offset or 0)) // 3600) % 24), sc.get("gate_block_hours_utc", [0]))
+    hour_flag = gate_hour_flag(int(((risk.server_now() - (risk.offset or 0)) // 3600) % 24), sc.get("gate_block_hours_utc", BLOCK_HOURS_UTC))
     if hour_flag:
         out.append(hour_flag)
     try:
@@ -681,8 +684,11 @@ def handle_signal(sig, key, sc, symbol=None, lane=None, mode=None, max_spread=No
     plan = {"action": sig["side"], "order_type": "MARKET", "entry_ref": round(entry, 2), "sl": round(sl, 2),
             "tp": round(tp, 2), "rr": round(abs(tp - entry) / max(abs(entry - sl), 1e-9), 2), "confidence": 0,
             "source": code, "reason": sig.get("reason", ""), "valid": True, "problem": ""}
+    rg = (market_regime() or {}) if S == sym() else {}
     meta = {"server_time": risk.server_now(), "origin": mode, "lane": lane, "symbol": S, "session": _session_short(),
-            "spread": tk["spread"], "regime": (market_regime() or {}).get("regime") if S == sym() else None}
+            "spread": tk["spread"], "regime": rg.get("regime"),
+            # recorded on every plan (shadow too) so the live-only regime filter below can be measured
+            "regime_fit": (code in rg.get("fit_strategies", [])) if rg and lane in REGIME_FILTER_LANES else None}
     gmode = sc.get("lane_gate_mode", "block")
     gate = context_gate(S, code, lane, sig["side"], entry, sl, sig.get("tf") or settings()["timeframe"]) if gmode != "off" else []
     plan["gate"] = "; ".join(gate)  # recorded for every plan (also shadow) so the gate itself can be measured
@@ -696,7 +702,6 @@ def handle_signal(sig, key, sc, symbol=None, lane=None, mode=None, max_spread=No
     elif gate and gmode == "block":
         problem = "บริบทตลาดไม่เอื้อ: " + plan["gate"]
     elif sc.get("regime_filter", True) and lane in REGIME_FILTER_LANES:  # gold lanes only
-        rg = market_regime()
         if code not in rg.get("fit_strategies", []):
             problem, result = (f"ตลาดตอนนี้ {rg['label']} – {code} ไม่เหมาะ "
                                f"(เหมาะ: {', '.join(rg.get('fit_strategies', [])) or '-'})"), "skip"
@@ -1778,7 +1783,7 @@ def ai_state():
             "limit_expiry_min": sc.get("ai_limit_expiry_min", 45), "has_key": ai_has_key(),
             "review_mode": sc.get("ai_review_mode", "shadow"), "review_trigger_r": sc.get("ai_review_trigger_r", 0.5),
             "review_min_conf": sc.get("ai_review_min_conf", 60), "gate_mode": sc.get("lane_gate_mode", "block"),
-            "gate_trend_tfs": sc.get("gate_trend_tfs", ["H1", "H4"]), "gate_block_hours_utc": sc.get("gate_block_hours_utc", [0]),
+            "gate_trend_tfs": sc.get("gate_trend_tfs", ["H1", "H4"]), "gate_block_hours_utc": sc.get("gate_block_hours_utc", BLOCK_HOURS_UTC),
             "provider": settings()["ai"].get("provider", "anthropic")}
 
 
