@@ -10,7 +10,8 @@ Scoring rules (conservative):
 - LIMIT/STOP: must fill within `expiry_min` minutes, otherwise "expired" (no result).
 - BUY exits on bid (M1 bars are bid), SELL exits on ask = bid + spread at analysis time.
 - If SL and TP are both inside one M1 bar, it counts as a loss.
-- Unresolved after 24 h -> closed at the last price (R = mark-to-market).
+- Unresolved after 24 h of trading (1440 closed M1 bars, the weekend does not count) -> closed at that bar's price
+  (R = mark-to-market).
 """
 import threading
 import time
@@ -19,7 +20,7 @@ import uuid
 import store
 
 MAX_RECORDS = 1500
-TIMEOUT = 24 * 3600
+TIMEOUT_BARS = 24 * 60  # closed M1 bars of trading, so a Friday-evening plan is not settled on Friday's last price
 BUCKETS = [(0, 50), (50, 60), (60, 70), (70, 80), (80, 101)]
 _lock = threading.Lock()
 
@@ -44,6 +45,7 @@ def record(plan, meta):
         "gate": plan.get("gate", ""), "valid_min": plan.get("valid_min"),
         "problem": plan.get("problem", ""), "liq_alignment": plan.get("liq_alignment"),
         "liq_notes": plan.get("liq_notes", []), "session": meta.get("session"), "regime": meta.get("regime"),
+        "regime_fit": meta.get("regime_fit"),
         "spread": float(meta.get("spread") or 0), "reason": str(plan.get("reason") or "")[:200],
         "executed": bool(meta.get("executed")), "status": "wait", "result_r": None, "exit": None, "exit_time": None,
     }
@@ -115,9 +117,10 @@ def _score(p, bars, now, expiry_min):
             p.update(status="done", exit="TP" if win else "SL", exit_time=int(r.time),
                      result_r=round(abs(p["tp"] - entry) / risk if win else -1.0, 2))
             return True
-    if now - p["time"] > TIMEOUT and len(b):
-        last = float(b["close"].iat[-1]) + (0 if buy else spr)
-        p.update(status="done", exit="หมดเวลา 24 ชม.", exit_time=int(b["time"].iat[-1]),
+    if len(b) >= TIMEOUT_BARS:
+        r = b.iloc[TIMEOUT_BARS - 1]
+        last = float(r["close"]) + (0 if buy else spr)
+        p.update(status="done", exit="หมดเวลา 24 ชม.", exit_time=int(r["time"]),
                  result_r=round(((last - entry) if buy else (entry - last)) / risk, 2))
         return True
     return False
